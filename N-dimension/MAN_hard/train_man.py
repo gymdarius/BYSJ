@@ -27,7 +27,7 @@ class MAN_Agent():
             net.to(device)
 
         self.update = 1000
-        self.epsilon_start = 0.9
+        self.epsilon_start = 1
         self.epsilon_end = 0.1
         self.epsilon_decay = 10000
         self.gamma = 0.99
@@ -39,7 +39,9 @@ class MAN_Agent():
 
     def epsilon_greedy_policy(self, ob, train=True):
         if train:
-            epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+            #epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+            steps = min(self.c, self.epsilon_decay)
+            epsilon = self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (steps / self.epsilon_decay)
         else:
             epsilon = 0.05
         if np.random.rand() >= epsilon:

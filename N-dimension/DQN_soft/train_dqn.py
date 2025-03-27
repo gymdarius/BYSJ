@@ -40,7 +40,8 @@ class DQN_Agent():
             )
     
     def epsilon_greedy_policy(self, q_values):
-        epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+        #epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+        epsilon = max(self.epsilon_end, self.epsilon_start - (self.epsilon_start - self.epsilon_end) * min(1.0, self.c / self.epsilon_decay))
         if np.random.rand() >= epsilon:
             return self.greedy_policy(q_values)
         else:
@@ -86,14 +87,15 @@ class DQN_Agent():
             loss = 1 / self.batch_size * torch.sum((y - q.view(1, -1))**2)
             loss.backward(retain_graph=True)
             self.optimizer.step()
+            self.soft_update()
 
             self.c += 1
 
-            if self.c % self.update_feq == 0:
+            #if self.c % self.update_feq == 0:
                 #path = self.current_network.save_model_weights()
                 #self.target_network.load_model(path)
-                self.soft_update()
-                self.target_network.model.eval()
+            #    self.soft_update()
+            #    self.target_network.model.eval()
             if not done:
                 state = next_state
             else:

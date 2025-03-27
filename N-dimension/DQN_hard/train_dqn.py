@@ -20,7 +20,7 @@ class DQN_Agent():
         self.target_network = DQN(self.env, self.n, lr)
         self.target_network.model.eval()
 
-        self.epsilon_start = 0.9
+        self.epsilon_start = 1
         self.epsilon_end = 0.1
         self.epsilon_decay = 10000
         self.gamma = 0.99
@@ -32,7 +32,8 @@ class DQN_Agent():
         self.optimizer = torch.optim.Adam(self.current_network.model.parameters(), lr=self.current_network.lr)
 
     def epsilon_greedy_policy(self, q_values):
-        epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+        #epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+        epsilon = max(self.epsilon_end, self.epsilon_start - (self.epsilon_start - self.epsilon_end) * min(1.0, self.c / self.epsilon_decay))
         if np.random.rand() >= epsilon:
             return self.greedy_policy(q_values)
         else:
