@@ -40,7 +40,9 @@ class MAN_Agent():
 
     def epsilon_greedy_policy(self, ob, train=True):
         if train:
-            epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+            #epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1. * self.c / self.epsilon_decay)
+            steps = min(self.c, self.epsilon_decay)
+            epsilon = self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (steps / self.epsilon_decay)
         else:
             epsilon = 0.05
         if np.random.rand() >= epsilon:
@@ -118,7 +120,7 @@ class MAN_Agent():
             #    path = self.agent.save_model_weights()
             #    self.agent.load_model(path)
             # 替换为
-            self.c += 1
+            #self.c += 1
             # 每次训练后都进行软更新
             self.agent.soft_update(self.tau)
     
