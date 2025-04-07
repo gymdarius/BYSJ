@@ -13,8 +13,10 @@ import json
 import psutil
 import GPUtil
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE  # Add t-SNE import
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np  # Add numpy import for np.argmax
 
 warnings.filterwarnings('ignore')
 args = set_params()
@@ -47,14 +49,78 @@ def get_gpu_usage(gpu_id=0):
         return gpu_memory, gpu_memory_max
     return 0, 0
 
-def visualize_pca(feat_full, labels):
-    pca = PCA(n_components=2)  # 使用PCA将高维数据降到二维
-    reduced_data = pca.fit_transform(feat_full)  # 适配PCA并降维
-    labels = np.argmax(labels, axis=1)  # 如果labels是one-hot编码，使用np.argmax转换为一维标签
-    plt.scatter(reduced_data[:, 0], reduced_data[:, 1], c=labels, cmap='jet', alpha=0.5)
-    plt.colorbar()  # 显示颜色条
-    plt.title('PCA of Features')
+# Replace PCA visualization with t-SNE visualization
+def visualize_tsne(feat_full, labels):
+    print("Performing t-SNE dimensionality reduction...")
+    start_time = time.time()
+    
+    # t-SNE for dimensionality reduction to 2D
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=30)
+    reduced_data = tsne.fit_transform(feat_full)
+    
+    # Convert one-hot labels to indices if needed
+    if labels.ndim > 1:
+        labels = np.argmax(labels, axis=1)
+    
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(reduced_data[:, 0], reduced_data[:, 1], c=labels, cmap='jet', alpha=0.5)
+    plt.colorbar(scatter)  # 显示颜色条
+    plt.title('t-SNE Visualization of Features')
+    
+    # Create directory for saving results if it doesn't exist
+    os.makedirs(f"./tsne_results/{args.dataset}/", exist_ok=True)
+    plt.savefig(f"./tsne_results/{args.dataset}/tsne_visualization.png")
     plt.show()
+    
+    end_time = time.time()
+    print(f"t-SNE completed in {end_time - start_time:.2f} seconds")
+
+
+def perform_tsne_analysis(features, labels, dataset_name, n_components=2):
+    """
+    Perform t-SNE dimensionality reduction and visualization
+    
+    Args:
+        features: Feature matrix to reduce
+        labels: Node labels for coloring
+        dataset_name: Name of the dataset for saving files
+        n_components: Number of components for visualization (default: 2)
+    """
+    print(f"Performing t-SNE analysis with {n_components} components...")
+    start_time = time.time()
+    
+    # Apply t-SNE
+    # Note: t-SNE is computationally expensive, might need to subsample for large datasets
+    if len(features) > 10000:
+        print(f"Dataset is large ({len(features)} samples). Subsampling to 10000 samples for t-SNE.")
+        indices = np.random.choice(len(features), 10000, replace=False)
+        features_sample = features[indices]
+        labels_sample = labels[indices] if labels.ndim == 1 else labels[indices, :]
+    else:
+        features_sample = features
+        labels_sample = labels
+    
+    tsne = TSNE(n_components=n_components, perplexity=30, random_state=seed)
+    reduced_features = tsne.fit_transform(features_sample)
+    
+    # Save reduced features
+    os.makedirs(f"./tsne_results/{dataset_name}/", exist_ok=True)
+    np.save(f"./tsne_results/{dataset_name}/tsne_features.npy", reduced_features)
+    
+    # Visualization for 2D
+    if n_components == 2:
+        plt.figure(figsize=(10, 8))
+        labels_cat = np.argmax(labels_sample, axis=1) if labels_sample.ndim > 1 else labels_sample
+        scatter = plt.scatter(reduced_features[:, 0], reduced_features[:, 1], 
+                             c=labels_cat, cmap='jet', alpha=0.5)
+        plt.colorbar(scatter)
+        plt.title(f't-SNE Visualization of {dataset_name}')
+        plt.savefig(f"./tsne_results/{dataset_name}/tsne_visualization.png")
+        plt.close()
+    
+    end_time = time.time()
+    print(f"t-SNE analysis completed in {end_time - start_time:.2f} seconds")
+    return reduced_features
 
 
 def save_results(results, filename):
@@ -70,7 +136,7 @@ def train():
         "classification": [],
         "clustering": [],
         "parameter_sensitivity": [],
-        "pca_visualization": [],
+        "tsne_visualization": [],  # Changed from pca_visualization
         "memory_usage": [],
         "gpu_usage": []
     }
@@ -155,12 +221,11 @@ def train():
         with open(f"./embeds/{args.dataset}/{str(args.turn)}.pkl", "wb") as f:
             pkl.dump(embeds.cpu().data.numpy(), f)
     
-    # Perform PCA analysis
-    if args.pca_analysis:
-        #from utils import perform_pca_analysis
-        print("Performing PCA analysis...")
-        # Use all nodes for PCA analysis
-        perform_pca_analysis(embeds.cpu().data.numpy(), label.cpu().numpy(), args.dataset, n_components=args.pca_components)
+    # Perform t-SNE analysis instead of PCA
+    if args.pca_analysis:  # Keep the same parameter name for backward compatibility
+        print("Performing t-SNE analysis instead of PCA...")
+        # Use all nodes for t-SNE analysis
+        perform_tsne_analysis(embeds.cpu().data.numpy(), label.cpu().numpy(), args.dataset, n_components=2)
     
     # 保存结果
     save_results(results, f"results_{args.dataset}.json")
