@@ -13,10 +13,13 @@ import json
 import psutil
 import GPUtil
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE  # Add t-SNE import
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np  # Add numpy import for np.argmax
+import numpy as np
+import seaborn as sns
 
 warnings.filterwarnings('ignore')
 args = set_params()
@@ -70,10 +73,104 @@ def visualize_tsne(feat_full, labels):
     # Create directory for saving results if it doesn't exist
     os.makedirs(f"./tsne_results/{args.dataset}/", exist_ok=True)
     plt.savefig(f"./tsne_results/{args.dataset}/tsne_visualization.png")
-    plt.show()
+    plt.close()
     
     end_time = time.time()
     print(f"t-SNE completed in {end_time - start_time:.2f} seconds")
+    
+    return reduced_data
+
+
+def perform_clustering_analysis(features, true_labels, dataset_name):
+    """
+    Perform clustering analysis on embeddings and evaluate with NMI and ARI metrics
+    
+    Args:
+        features: Feature matrix to cluster
+        true_labels: Ground truth labels for evaluation
+        dataset_name: Name of the dataset for saving files
+    """
+    print("Performing clustering analysis and evaluation...")
+    
+    # Ensure labels are in the right format (convert one-hot to class indices if needed)
+    if true_labels.ndim > 1:
+        true_labels = np.argmax(true_labels, axis=1)
+    
+    # Get number of clusters from true labels
+    n_clusters = len(np.unique(true_labels))
+    print(f"Number of clusters detected: {n_clusters}")
+    
+    # Apply KMeans clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=seed, n_init=10)
+    cluster_labels = kmeans.fit_predict(features)
+    
+    # Calculate NMI and ARI scores
+    nmi_score = normalized_mutual_info_score(true_labels, cluster_labels)
+    ari_score = adjusted_rand_score(true_labels, cluster_labels)
+    
+    print(f"Clustering evaluation results:")
+    print(f"NMI (Normalized Mutual Information): {nmi_score:.4f}")
+    print(f"ARI (Adjusted Rand Index): {ari_score:.4f}")
+    
+    # Create directory for saving results if it doesn't exist
+    results_dir = f"./clustering_results/{dataset_name}/"
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Visualization 1: t-SNE plot with cluster assignments
+    # First reduce dimensionality for visualization
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=30)
+    reduced_data = tsne.fit_transform(features)
+    
+    plt.figure(figsize=(12, 10))
+    plt.subplot(2, 1, 1)
+    scatter1 = plt.scatter(reduced_data[:, 0], reduced_data[:, 1], c=true_labels, cmap='tab10', alpha=0.7, s=30)
+    plt.colorbar(scatter1)
+    plt.title('t-SNE Visualization with True Labels')
+    
+    plt.subplot(2, 1, 2)
+    scatter2 = plt.scatter(reduced_data[:, 0], reduced_data[:, 1], c=cluster_labels, cmap='tab10', alpha=0.7, s=30)
+    plt.colorbar(scatter2)
+    plt.title('t-SNE Visualization with KMeans Clusters')
+    
+    plt.tight_layout()
+    plt.savefig(f"{results_dir}/tsne_clustering_comparison.png")
+    plt.close()
+    
+    # Visualization 2: Bar chart of NMI and ARI scores
+    plt.figure(figsize=(10, 6))
+    metrics = ['NMI', 'ARI']
+    scores = [nmi_score, ari_score]
+    
+    bars = plt.bar(metrics, scores, color=['#1f77b4', '#ff7f0e'])
+    
+    # Add value labels on the bars
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                f'{height:.4f}', ha='center', va='bottom', fontsize=12)
+    
+    plt.ylim(0, 1.1)  # Both NMI and ARI have range [0,1]
+    plt.title('Clustering Evaluation Metrics')
+    plt.ylabel('Score')
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    plt.savefig(f"{results_dir}/clustering_metrics.png")
+    plt.close()
+    
+    # Save the results as JSON
+    clustering_results = {
+        "dataset": dataset_name,
+        "n_clusters": n_clusters,
+        "nmi_score": float(nmi_score),
+        "ari_score": float(ari_score),
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    with open(f"{results_dir}/clustering_metrics.json", "w") as f:
+        json.dump(clustering_results, f, indent=4)
+    
+    return nmi_score, ari_score
 
 
 def perform_tsne_analysis(features, labels, dataset_name, n_components=2):
@@ -134,9 +231,9 @@ def train():
         "mp": [],
         "sc": [],
         "classification": [],
-        "clustering": [],
+        "clustering": {},  # Changed to dict to store NMI and ARI scores
         "parameter_sensitivity": [],
-        "tsne_visualization": [],  # Changed from pca_visualization
+        "tsne_visualization": [],
         "memory_usage": [],
         "gpu_usage": []
     }
@@ -221,11 +318,24 @@ def train():
         with open(f"./embeds/{args.dataset}/{str(args.turn)}.pkl", "wb") as f:
             pkl.dump(embeds.cpu().data.numpy(), f)
     
-    # Perform t-SNE analysis instead of PCA
+    # Perform t-SNE analysis and clustering evaluation
     if args.pca_analysis:  # Keep the same parameter name for backward compatibility
-        print("Performing t-SNE analysis instead of PCA...")
+        print("Performing t-SNE analysis and clustering evaluation...")
         # Use all nodes for t-SNE analysis
-        perform_tsne_analysis(embeds.cpu().data.numpy(), label.cpu().numpy(), args.dataset, n_components=2)
+        embeddings_np = embeds.cpu().data.numpy()
+        labels_np = label.cpu().numpy()
+        
+        # Perform t-SNE visualization
+        reduced_features = perform_tsne_analysis(embeddings_np, labels_np, args.dataset, n_components=2)
+        
+        # Perform clustering analysis and generate visualizations
+        nmi_score, ari_score = perform_clustering_analysis(embeddings_np, labels_np, args.dataset)
+        
+        # Store clustering metrics in results
+        results["clustering"] = {
+            "NMI": float(nmi_score),
+            "ARI": float(ari_score)
+        }
     
     # 保存结果
     save_results(results, f"results_{args.dataset}.json")
