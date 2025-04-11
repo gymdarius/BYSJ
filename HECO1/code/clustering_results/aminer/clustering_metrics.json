@@ -1,0 +1,7 @@
+{
+    "dataset": "aminer",
+    "n_clusters": 4,
+    "nmi_score": 0.19309260402754935,
+    "ari_score": 0.13312962978316092,
+    "timestamp": "2025-04-07 16:37:18"
+}

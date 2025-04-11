@@ -1,0 +1,7 @@
+{
+    "dataset": "freebase",
+    "n_clusters": 3,
+    "nmi_score": 0.1754623325828019,
+    "ari_score": 0.19977753244804325,
+    "timestamp": "2025-04-11 16:57:46"
+}

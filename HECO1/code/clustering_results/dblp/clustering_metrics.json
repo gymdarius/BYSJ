@@ -1,0 +1,7 @@
+{
+    "dataset": "dblp",
+    "n_clusters": 4,
+    "nmi_score": 0.7078779023526373,
+    "ari_score": 0.7609443705007575,
+    "timestamp": "2025-04-07 15:56:48"
+}
