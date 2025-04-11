@@ -17,6 +17,7 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -58,7 +59,7 @@ def visualize_tsne(feat_full, labels):
     start_time = time.time()
     
     # t-SNE for dimensionality reduction to 2D
-    tsne = TSNE(n_components=2, random_state=seed, perplexity=30)
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=30, n_iter=8000)
     reduced_data = tsne.fit_transform(feat_full)
     
     # Convert one-hot labels to indices if needed
@@ -118,7 +119,7 @@ def perform_clustering_analysis(features, true_labels, dataset_name):
     
     # Visualization 1: t-SNE plot with cluster assignments
     # First reduce dimensionality for visualization
-    tsne = TSNE(n_components=2, random_state=seed, perplexity=30)
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=30, n_iter=8000)
     reduced_data = tsne.fit_transform(features)
     
     plt.figure(figsize=(12, 10))
@@ -175,7 +176,7 @@ def perform_clustering_analysis(features, true_labels, dataset_name):
 
 def perform_tsne_analysis(features, labels, dataset_name, n_components=2):
     """
-    Perform t-SNE dimensionality reduction and visualization
+    Perform t-SNE dimensionality reduction and visualization with numbered clusters
     
     Args:
         features: Feature matrix to reduce
@@ -197,26 +198,89 @@ def perform_tsne_analysis(features, labels, dataset_name, n_components=2):
         features_sample = features
         labels_sample = labels
     
-    tsne = TSNE(n_components=n_components, perplexity=30, random_state=seed)
+    tsne = TSNE(n_components=n_components, perplexity=30, random_state=seed, n_iter=8000)
     reduced_features = tsne.fit_transform(features_sample)
     
     # Save reduced features
     os.makedirs(f"./tsne_results/{dataset_name}/", exist_ok=True)
     np.save(f"./tsne_results/{dataset_name}/tsne_features.npy", reduced_features)
     
-    # Visualization for 2D
+    # Visualization for 2D with numbered clusters
     if n_components == 2:
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(12, 10))
+        
+        # Convert labels to categorical if they're one-hot encoded
         labels_cat = np.argmax(labels_sample, axis=1) if labels_sample.ndim > 1 else labels_sample
-        scatter = plt.scatter(reduced_features[:, 0], reduced_features[:, 1], 
-                             c=labels_cat, cmap='jet', alpha=0.5)
-        plt.colorbar(scatter)
-        plt.title(f't-SNE Visualization of {dataset_name}')
-        plt.savefig(f"./tsne_results/{dataset_name}/tsne_visualization.png")
-        plt.close()
+        unique_labels = np.unique(labels_cat)
+        num_classes = len(unique_labels)
+        
+        # Create custom colormap with enough distinct colors
+        colors = plt.cm.jet(np.linspace(0, 1, num_classes))
+        
+        # Plot each cluster with a unique color and add numbered annotations
+        for i, label in enumerate(unique_labels):
+            mask = labels_cat == label
+            plt.scatter(
+                reduced_features[mask, 0], 
+                reduced_features[mask, 1],
+                c=[colors[i]],
+                label=f'Class {i+1}',
+                alpha=0.7
+            )
+            
+            # Find the center of each cluster to place the number
+            center_x = np.mean(reduced_features[mask, 0])
+            center_y = np.mean(reduced_features[mask, 1])
+            
+            # Add cluster number annotation
+            plt.annotate(
+                f'{i+1}',
+                (center_x, center_y),
+                fontsize=14,
+                fontweight='bold',
+                ha='center',
+                va='center',
+                bbox=dict(boxstyle="circle", fc="white", ec="black", alpha=0.8)
+            )
+        
+        plt.title(f't-SNE Visualization of {dataset_name} Dataset\n({num_classes} classes identified)')
+        plt.xlabel('t-SNE Component 1')
+        plt.ylabel('t-SNE Component 2')
+        
+        # Add legend showing the class numbers
+        plt.legend(title='Class Number', loc='best', bbox_to_anchor=(1, 1))
+        
+        plt.tight_layout()
+        plt.savefig(f"./tsne_results/{dataset_name}/tsne_visualization_numbered.png", bbox_inches='tight')
+        
+        # Create a second visualization with just colors and a legend showing numbers
+        plt.figure(figsize=(12, 10))
+        scatter = plt.scatter(
+            reduced_features[:, 0], 
+            reduced_features[:, 1], 
+            c=labels_cat,
+            cmap='jet',
+            alpha=0.7
+        )
+        
+        # Create legend with numbered classes
+        legend_elements = [
+            Patch(facecolor=colors[i], edgecolor='black', alpha=0.7, label=f'Class {i+1}')
+            for i in range(num_classes)
+        ]
+        plt.legend(handles=legend_elements, title="Class Number", loc='best', bbox_to_anchor=(1, 1))
+        
+        plt.title(f't-SNE Visualization of {dataset_name} Dataset\n({num_classes} classes)')
+        plt.xlabel('t-SNE Component 1')
+        plt.ylabel('t-SNE Component 2')
+        plt.tight_layout()
+        plt.savefig(f"./tsne_results/{dataset_name}/tsne_visualization_with_legend.png", bbox_inches='tight')
+        
+        plt.close('all')
     
     end_time = time.time()
     print(f"t-SNE analysis completed in {end_time - start_time:.2f} seconds")
+    print(f"Found {len(np.unique(labels_cat))} distinct classes in the data")
     return reduced_features
 
 
@@ -285,6 +349,7 @@ def train():
             print('Early stopping!')
             break
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimiser.step()
         epoch_end = time.time()
         epoch_time = epoch_end - epoch_start
@@ -325,7 +390,7 @@ def train():
         embeddings_np = embeds.cpu().data.numpy()
         labels_np = label.cpu().numpy()
         
-        # Perform t-SNE visualization
+        # Perform t-SNE visualization with numbered clusters
         reduced_features = perform_tsne_analysis(embeddings_np, labels_np, args.dataset, n_components=2)
         
         # Perform clustering analysis and generate visualizations
